@@ -118,6 +118,23 @@ services:
     networks:
       - whatsapp_internal
 
+  # Live QR pairing page, OFF by default (replicas 0). Set WHATSAPP_QR_PAGE=1 in the stack
+  # env and redeploy, open http://192.168.99.154:8095 (LAN/Tailscale only), scan, then set it
+  # back to 0. It proxies only GET /qr → bridge /api/qr; the API key never reaches the browser.
+  whatsapp-qr:
+    image: ghcr.io/cjam28/whatsapp-qr-page:${WHATSAPP_IMAGE_TAG:-ai01}
+    restart: unless-stopped
+    environment:
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY}
+    ports:
+      - "${WHATSAPP_QR_BIND:-192.168.99.154}:${WHATSAPP_QR_PORT:-8095}:8080"
+    deploy:
+      replicas: ${WHATSAPP_QR_PAGE:-0}
+    depends_on:
+      - whatsapp-bridge
+    networks:
+      - whatsapp_internal
+
 volumes:
   whatsapp_store:
     driver: local

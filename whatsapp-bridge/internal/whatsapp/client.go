@@ -56,6 +56,11 @@ type Client struct {
 	pairingError       error
 	pairingSuccessChan chan struct{}
 
+	// Latest QR login code (for GET /api/qr), cleared once the QR flow ends.
+	qrMutex   sync.Mutex
+	qrCode    string
+	qrUpdated time.Time
+
 	// Called just before AutoReconnect circuit breaker gives up (30 consecutive failures).
 	// Use to fire an out-of-band alert before the process exits via watchdog.
 	circuitBreakerCallback func()
@@ -193,9 +198,13 @@ func (c *Client) Connect() error {
 		// Print QR code for pairing with phone
 		for evt := range qrChan {
 			if evt.Event == "code" {
+				c.setQRCode(evt.Code)
 				fmt.Println("\nScan this QR code with your WhatsApp app:")
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			} else if evt.Event == "success" {
+				continue
+			}
+			c.setQRCode("")
+			if evt.Event == "success" {
 				connected <- true
 				break
 			}
@@ -704,4 +713,18 @@ func (c *Client) HandlePairingError(err error) {
 // Antiban returns the anti-ban send interceptor.
 func (c *Client) Antiban() *antiban.SendInterceptor {
 	return c.antiban
+}
+
+func (c *Client) setQRCode(code string) {
+	c.qrMutex.Lock()
+	defer c.qrMutex.Unlock()
+	c.qrCode = code
+	c.qrUpdated = time.Now()
+}
+
+// CurrentQR returns the latest QR login code ("" when none is active) and when it changed.
+func (c *Client) CurrentQR() (string, time.Time) {
+	c.qrMutex.Lock()
+	defer c.qrMutex.Unlock()
+	return c.qrCode, c.qrUpdated
 }

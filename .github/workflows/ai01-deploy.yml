@@ -16,8 +16,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  test:
     if: github.repository == 'cjam28/whatsapp-mcp-extended'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: whatsapp-bridge/go.mod
+      - name: Bridge build, vet, test
+        working-directory: whatsapp-bridge
+        run: |
+          test -z "$(gofmt -l internal)" || { gofmt -l internal; exit 1; }
+          go build ./...
+          go vet ./internal/api ./internal/whatsapp
+          go test ./...
+      - uses: astral-sh/setup-uv@v6
+      - name: MCP server tests
+        working-directory: whatsapp-mcp-server
+        env:
+          WA_SKIP_DB_CHECK: "1"
+        run: uv run -q pytest -q
+
+  build:
+    needs: [test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,6 +53,9 @@ jobs:
             dockerfile: Dockerfile.bridge
           - name: whatsapp-mcp
             dockerfile: Dockerfile.mcp
+          - name: whatsapp-qr-page
+            dockerfile: deploy/ai01/qr-page/Dockerfile
+            context: deploy/ai01/qr-page
     steps:
       - uses: actions/checkout@v4
       - id: meta
@@ -41,7 +68,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context || '.' }}
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64

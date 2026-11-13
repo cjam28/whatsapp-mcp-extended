@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp Pairing</title>
+<style>
+  :root { --bg:#f6f7f8; --fg:#1b1f23; --muted:#5f6b76; --card:#fff; --ok:#1a7f37; --warn:#9a6700; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1214; --fg:#e6e8ea; --muted:#9aa4ad; --card:#1a1e21; --ok:#3fb950; --warn:#d29922; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,sans-serif; display:flex; justify-content:center; padding:24px 16px; }
+  main { max-width:420px; width:100%; text-align:center; }
+  h1 { font-size:1.3rem; margin:0 0 4px; }
+  p { color:var(--muted); margin:4px 0 16px; }
+  #qr { background:#fff; padding:16px; border-radius:12px; display:inline-block; min-height:264px; min-width:264px; }
+  #status { font-weight:600; margin-top:16px; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); }
+  ol { text-align:left; color:var(--muted); padding-left:20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Link WhatsApp to AI01</h1>
+  <p>Scan this code with the phone whose number the bridge should use.</p>
+  <div id="qr"></div>
+  <div id="status">Loading…</div>
+  <ol>
+    <li>On the phone: WhatsApp → Settings → Linked devices → Link a device.</li>
+    <li>Point the camera at the code. It refreshes on its own about every 20 seconds.</li>
+    <li>If it says the code expired, ask for the bridge to be restarted for a fresh one.</li>
+  </ol>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
+<script>
+  const box = document.getElementById('qr');
+  const status = document.getElementById('status');
+  const qr = new QRCode(box, { width: 256, height: 256, correctLevel: QRCode.CorrectLevel.L });
+  let last = '';
+  async function tick() {
+    try {
+      const r = await fetch('qr', { cache: 'no-store' });
+      const d = await r.json();
+      if (d.linked) {
+        qr.clear(); last = '';
+        status.textContent = 'Linked. You can close this page.';
+        status.className = 'ok';
+        return;
+      }
+      if (d.code) {
+        if (d.code !== last) { qr.makeCode(d.code); last = d.code; }
+        status.textContent = 'Waiting for scan…';
+        status.className = '';
+      } else {
+        qr.clear(); last = '';
+        status.textContent = 'No active code (it expired). Restart the bridge for a fresh one.';
+        status.className = 'warn';
+      }
+    } catch (e) {
+      status.textContent = 'Bridge unreachable, retrying…';
+      status.className = 'warn';
+    }
+    setTimeout(tick, 2000);
+  }
+  tick();
+</script>
+</body>
+</html>

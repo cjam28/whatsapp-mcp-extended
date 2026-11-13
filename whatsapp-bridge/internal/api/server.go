@@ -111,6 +111,7 @@ func (s *Server) registerHandlers() {
 	http.HandleFunc("/api/pair", SecureMiddleware(s.handlePairPhone))
 	http.HandleFunc("/api/pair/reset", SecureMiddleware(s.handlePairReset))
 	http.HandleFunc("/api/pairing", SecureMiddleware(s.handlePairingStatus))
+	http.HandleFunc("/api/qr", SecureMiddleware(s.handleQRCode))
 	http.HandleFunc("/api/connection", SecureMiddleware(s.handleConnectionStatus))
 
 	// Connection management

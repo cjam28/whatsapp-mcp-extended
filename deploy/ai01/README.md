@@ -34,6 +34,10 @@ Upstream's warning still applies: this is an unofficial client, and WhatsApp ban
 
 ## Pair or re-pair
 
+**QR page (easiest):** set `WHATSAPP_QR_PAGE=1` in the stack env, then redeploy. Open http://192.168.99.154:8095 (LAN or Tailscale only) and scan it from WhatsApp → Settings → Linked devices → Link a device. The bridge only issues QR codes for about 2 minutes after it starts. If the page says the code expired, restart `whatsapp-bridge`. When the page says *Linked*, set `WHATSAPP_QR_PAGE=0` and redeploy. The page proxies only `GET /qr` → bridge `/api/qr`, a route this fork adds; the API key stays server-side.
+
+**Phone code (no camera):**
+
 1. Set `WHATSAPP_PAIR_PHONE` in the stack env, then redeploy (or start the `whatsapp-pair` container).
 2. Read the code from the `whatsapp-pair` logs: lines starting `PAIR_REQUEST … "code":"XXXX-XXXX"`. A new code is printed every 2.5 minutes, for 10 minutes.
 3. On the phone, open WhatsApp → Settings → Linked devices → Link a device → **Link with phone number instead**, and enter the code.

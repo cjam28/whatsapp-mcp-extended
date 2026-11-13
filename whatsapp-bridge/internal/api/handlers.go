@@ -2098,3 +2098,25 @@ func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
+
+// handleQRCode returns the current QR login code so a page can render it.
+// GET /api/qr → { success, linked, code, updated_at }. code is "" when no QR is active
+// (already linked, or the QR flow timed out: restart the bridge for a fresh one).
+func (s *Server) handleQRCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		SendJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	linked := s.client.Store.ID != nil
+	code, updated := s.client.CurrentQR()
+	if linked {
+		code = ""
+	}
+	resp := map[string]interface{}{"success": true, "linked": linked, "code": code}
+	if !updated.IsZero() {
+		resp["updated_at"] = updated.UTC().Format(time.RFC3339)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(resp)
+}

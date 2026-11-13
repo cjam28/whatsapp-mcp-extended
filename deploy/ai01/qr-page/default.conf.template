@@ -1,0 +1,22 @@
+# Serves the pairing page and proxies ONLY GET /qr → bridge /api/qr, adding the API key
+# server-side. No other bridge endpoint is reachable through this container.
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    location = / {
+        add_header Cache-Control "no-store" always;
+        try_files /index.html =404;
+    }
+
+    location = /qr {
+        limit_except GET { deny all; }
+        proxy_pass http://whatsapp-bridge:8080/api/qr;
+        proxy_set_header X-API-Key "${WHATSAPP_API_KEY}";
+        proxy_set_header Host whatsapp-bridge;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location / { return 404; }
+}
