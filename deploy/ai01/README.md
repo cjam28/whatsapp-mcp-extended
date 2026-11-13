@@ -1,7 +1,7 @@
 # AI01 deploy (branch `ai01`)
 
 `whatsapp-mcp-extended` runs on AI01 (AppServer LXC 101, Portainer endpoint 4) as the git-linked stack
-**`whatsapp-mcp`**. The stack points at this repo, branch `ai01`, compose file `deploy/ai01/docker-compose.yml`. Portainer builds both images from this checkout.
+**`whatsapp-mcp`**. The stack points at this repo, branch `ai01`, compose file `deploy/ai01/docker-compose.yml`. GitHub Actions builds the images to GHCR (`ghcr.io/cjam28/whatsapp-bridge` and `whatsapp-mcp`, tagged `:ai01` and `:sha-<rev>`). Portainer can't build on AI01: its BuildKit fails with "frame too large".
 MCPHub (https://mcp.christoalto.com) reaches it at `http://whatsapp-mcp:8081/mcp` over `mcp_net`. The hub group is
 `whatsapp` (`/mcp/$smart/whatsapp`).
 
@@ -43,6 +43,6 @@ Re-pairing is only needed if the phone has been offline for more than 14 days, t
 
 ## Deploy and upgrade
 
-- Pushing to `ai01` runs `.github/workflows/ai01-redeploy.yml`, which POSTs the stack webhook (repo secret `AI01_WHATSAPP_STACK_WEBHOOK`). Portainer then re-pulls the branch and rebuilds.
+- Pushing to `ai01` runs `.github/workflows/ai01-deploy.yml`: it builds and pushes both images, then POSTs the stack webhook (repo secret `AI01_WHATSAPP_STACK_WEBHOOK`). The stack force-pulls `:ai01`. To pin a revision, set `WHATSAPP_IMAGE_TAG=sha-<rev>` in the stack env.
 - To take an upstream release, merge `upstream/main` into `ai01` and push.
 - Creating the stack from scratch: `deploy/ai01/portainer-create-stack.sh`.

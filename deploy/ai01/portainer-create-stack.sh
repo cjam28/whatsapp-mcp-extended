@@ -29,12 +29,12 @@ print(json.dumps({
     "RepositoryReferenceName": "refs/heads/ai01",
     "ComposeFile": "deploy/ai01/docker-compose.yml",
     "RepositoryAuthentication": False,
-    "AutoUpdate": {"Webhook": str(uuid.uuid4()), "ForceUpdate": False, "ForcePullImage": False},
+    "AutoUpdate": {"Webhook": str(uuid.uuid4()), "ForceUpdate": False, "ForcePullImage": True},
     "Env": [{"name": k, "value": v} for k, v in env.items()],
 }))
 PY
 
-echo "Creating stack $STACK_NAME (Portainer builds both images; can take several minutes)..."
+echo "Creating stack $STACK_NAME (images come from GHCR; run the ai01-deploy workflow first)..."
 resp="$(curl -skS --max-time 1200 -X POST \
   -H "X-API-Key: $AI01_PORTAINER_API_TOKEN" -H "Content-Type: application/json" \
   -d @"$payload" "$PORTAINER_URL/api/stacks/create/standalone/repository?endpointId=$ENDPOINT_ID")"

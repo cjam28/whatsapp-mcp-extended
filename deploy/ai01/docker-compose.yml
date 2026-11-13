@@ -1,6 +1,10 @@
 # AI01 deploy of whatsapp-mcp-extended — Portainer git-linked stack `whatsapp-mcp`
 # (repo cjam28/whatsapp-mcp-extended, branch ai01, compose deploy/ai01/docker-compose.yml).
 #
+# Images are built by .github/workflows/ai01-deploy.yml (Portainer's compose build fails on
+# AI01 with a BuildKit "frame too large" error), tagged :ai01 and :sha-<rev>. Pin a revision
+# with WHATSAPP_IMAGE_TAG=sha-<rev> in the stack env.
+#
 # MCPHub reaches the MCP server at http://whatsapp-mcp:8081/mcp over the external `mcp_net`.
 # Nothing here publishes a host port: the MCP endpoint has no auth of its own, so the hub
 # is the only way in. The bridge talks only on the internal network.
@@ -11,10 +15,7 @@
 
 services:
   whatsapp-bridge:
-    build:
-      context: ../..
-      dockerfile: Dockerfile.bridge
-    image: whatsapp-bridge:ai01
+    image: ghcr.io/cjam28/whatsapp-bridge:${WHATSAPP_IMAGE_TAG:-ai01}
     container_name: whatsapp-bridge
     restart: unless-stopped
     mem_limit: 256m
@@ -56,10 +57,7 @@ services:
       - whatsapp_internal
 
   whatsapp-mcp:
-    build:
-      context: ../..
-      dockerfile: Dockerfile.mcp
-    image: whatsapp-mcp:ai01
+    image: ghcr.io/cjam28/whatsapp-mcp:${WHATSAPP_IMAGE_TAG:-ai01}
     container_name: whatsapp-mcp
     restart: unless-stopped
     mem_limit: 512m
