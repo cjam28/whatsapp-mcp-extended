@@ -1,0 +1,130 @@
+# AI01 deploy of whatsapp-mcp-extended — Portainer git-linked stack `whatsapp-mcp`
+# (repo cjam28/whatsapp-mcp-extended, branch ai01, compose deploy/ai01/docker-compose.yml).
+#
+# MCPHub reaches the MCP server at http://whatsapp-mcp:8081/mcp over the external `mcp_net`.
+# Nothing here publishes a host port: the MCP endpoint has no auth of its own, so the hub
+# is the only way in. The bridge talks only on the internal network.
+#
+# Linked to a PERSONAL number: the bridge's anti-ban layer is ON (upstream default is off).
+# Required stack env: WHATSAPP_API_KEY. Optional: WHATSAPP_PAIR_PHONE (only while pairing).
+# See deploy/ai01/README.md.
+
+services:
+  whatsapp-bridge:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.bridge
+    image: whatsapp-bridge:ai01
+    container_name: whatsapp-bridge
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      TZ: ${TZ:-America/New_York}
+      API_KEY: ${WHATSAPP_API_KEY:?set WHATSAPP_API_KEY in Portainer stack env}
+      API_BIND_HOST: 0.0.0.0
+      DISABLE_AUTH_CHECK: "false"
+      # --- anti-ban / rate limiting (internal/antiban) ---
+      ANTIBAN_ENABLED: ${ANTIBAN_ENABLED:-true}
+      # Every send/react/edit/delete/poll is serialized and spaced by a random delay.
+      ANTIBAN_TEXT_DELAY_MIN: ${ANTIBAN_TEXT_DELAY_MIN:-3s}
+      ANTIBAN_TEXT_DELAY_MAX: ${ANTIBAN_TEXT_DELAY_MAX:-8s}
+      ANTIBAN_FEEDBACK_DELAY_MIN: ${ANTIBAN_FEEDBACK_DELAY_MIN:-1s}
+      ANTIBAN_FEEDBACK_DELAY_MAX: ${ANTIBAN_FEEDBACK_DELAY_MAX:-3s}
+      ANTIBAN_TYPING_MS_PER_CHAR: ${ANTIBAN_TYPING_MS_PER_CHAR:-40}
+      # Daily send cap. Upstream lifts the cap entirely once WARMUP_DAYS have passed, so the
+      # warm-up is set to 10 years: the cap starts at START_LIMIT/day and rises ~0.18/day
+      # (≈30 → ~95/day after a year). 72h of no sends resets it to day 0.
+      ANTIBAN_WARMUP_DAYS: ${ANTIBAN_WARMUP_DAYS:-3650}
+      ANTIBAN_WARMUP_START_LIMIT: ${ANTIBAN_WARMUP_START_LIMIT:-30}
+      ANTIBAN_WARMUP_STATE_PATH: store/antiban_warmup.json
+      # Pause all sends when the risk score (disconnects, 403s, stream errors) reaches this.
+      ANTIBAN_RISK_PAUSE_THRESHOLD: ${ANTIBAN_RISK_PAUSE_THRESHOLD:-50}
+      # --- presence: don't look like an always-online bot ---
+      WA_PRESENCE_MODE: ${WA_PRESENCE_MODE:-human}
+      PRESENCE_PING_ENABLED: ${PRESENCE_PING_ENABLED:-false}
+      HISTORY_SYNC_DAYS_LIMIT: ${HISTORY_SYNC_DAYS_LIMIT:-90}
+      WHATSAPP_ALLOWLIST_JIDS: ${WHATSAPP_ALLOWLIST_JIDS:-}
+    volumes:
+      - whatsapp_store:/app/whatsapp-bridge/store
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/api/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - whatsapp_internal
+
+  whatsapp-mcp:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.mcp
+    image: whatsapp-mcp:ai01
+    container_name: whatsapp-mcp
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      TZ: ${TZ:-America/New_York}
+      DEBUG: "false"
+      MCP_TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8081"
+      WHATSAPP_MCP_TOOLSETS: ${WHATSAPP_MCP_TOOLSETS:-all}
+      BRIDGE_HOST: whatsapp-bridge
+      API_KEY: ${WHATSAPP_API_KEY}
+    volumes:
+      - whatsapp_store:/app/store
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8081), timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      whatsapp-bridge:
+        condition: service_healthy
+    networks:
+      - whatsapp_internal
+      - mcp_net
+
+  # One-shot pairing helper. Does nothing unless WHATSAPP_PAIR_PHONE is set and the bridge is
+  # not linked. Then it requests an 8-digit code (printed to its logs) and requests a fresh one
+  # whenever the previous expires, for up to ~10 minutes, and exits once linked.
+  whatsapp-pair:
+    image: curlimages/curl:8.11.1
+    container_name: whatsapp-pair
+    restart: "no"
+    environment:
+      API_KEY: ${WHATSAPP_API_KEY}
+      PAIR_PHONE: ${WHATSAPP_PAIR_PHONE:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        B=http://whatsapp-bridge:8080/api
+        if [ -z "$$PAIR_PHONE" ]; then echo "WHATSAPP_PAIR_PHONE not set; nothing to do"; exit 0; fi
+        i=0
+        while [ $$i -lt 40 ]; do
+          st=$$(curl -s -H "X-API-Key: $$API_KEY" $$B/connection)
+          case "$$st" in *'"linked":true'*) echo "PAIRED: $$st"; exit 0;; esac
+          if [ $$((i % 10)) -eq 0 ]; then
+            echo "PAIR_REQUEST $$(date -u +%H:%M:%SZ): $$(curl -s -X POST -H "X-API-Key: $$API_KEY" -H 'Content-Type: application/json' -d "{\"phone_number\":\"$$PAIR_PHONE\"}" $$B/pair)"
+          fi
+          i=$$((i + 1)); sleep 15
+        done
+        echo "Not linked after 10 minutes; redeploy or restart this container to try again"; exit 1
+    depends_on:
+      whatsapp-bridge:
+        condition: service_healthy
+    networks:
+      - whatsapp_internal
+
+volumes:
+  whatsapp_store:
+    driver: local
+
+networks:
+  whatsapp_internal:
+    driver: bridge
+  mcp_net:
+    name: mcp_net
+    external: true

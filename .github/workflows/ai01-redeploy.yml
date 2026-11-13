@@ -1,0 +1,31 @@
+name: AI01 redeploy
+
+# Push to `ai01` → POST the Portainer stack webhook for `whatsapp-mcp` (AI01, endpoint 4).
+# Portainer re-pulls this branch and rebuilds the images. Portainer git polling is unreliable
+# on AI01, so this webhook is the update path. Secret: AI01_WHATSAPP_STACK_WEBHOOK (full URL).
+
+on:
+  push:
+    branches: [ai01]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai01-redeploy
+  cancel-in-progress: false
+
+jobs:
+  redeploy:
+    if: github.repository == 'cjam28/whatsapp-mcp-extended'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portainer stack webhook
+        env:
+          WEBHOOK: ${{ secrets.AI01_WHATSAPP_STACK_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "::error::AI01_WHATSAPP_STACK_WEBHOOK not set"; exit 1; fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST --max-time 60 "$WEBHOOK")
+          echo "webhook HTTP $code"
+          case "$code" in 2*) ;; *) echo "::error::webhook returned $code"; exit 1;; esac
