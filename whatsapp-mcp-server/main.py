@@ -8,6 +8,7 @@ from typing import Any, Literal, cast
 import requests as _requests
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.utilities.types import Image
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 from lib.utils import WHATSAPP_API_BASE_URL as _BRIDGE_URL
@@ -63,8 +64,26 @@ from whatsapp import update_group as whatsapp_update_group
 
 _INLINE_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
+def _transport_security() -> TransportSecuritySettings | None:
+    """DNS-rebinding protection with extra allowed Host headers from MCP_ALLOWED_HOSTS.
+
+    The SDK only allows localhost by default, so a client reaching the server by container
+    name (e.g. MCPHub → whatsapp-mcp:8081) gets 421 Invalid Host header. Comma-separated
+    host[:port] values; append ":*" to allow any port.
+    """
+    extra = [h.strip() for h in os.getenv("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
+    if not extra:
+        return None
+    hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*", *extra]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts,
+        allowed_origins=[f"http://{h}" for h in hosts],
+    )
+
+
 # Initialize FastMCP server
-mcp = FastMCP("whatsapp-extended")
+mcp = FastMCP("whatsapp-extended", transport_security=_transport_security())
 
 ALL_TOOLSETS = {
     "core",

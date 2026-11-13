@@ -67,6 +67,8 @@ services:
       MCP_TRANSPORT: streamable-http
       HOST: 0.0.0.0
       PORT: "8081"
+      # Host headers MCPHub uses; anything else gets 421 (DNS-rebinding protection stays on).
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-whatsapp-mcp:*}
       WHATSAPP_MCP_TOOLSETS: ${WHATSAPP_MCP_TOOLSETS:-all}
       BRIDGE_HOST: whatsapp-bridge
       API_KEY: ${WHATSAPP_API_KEY}
